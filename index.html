@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>マインドマップ</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background: #0d1117;
+            color: #c9d1d9;
+            font-family: 'Segoe UI', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', sans-serif;
+            min-height: 100vh;
+        }
+
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 18px 32px;
+            border-bottom: 1px solid #21262d;
+        }
+
+        .header-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #e6edf3;
+            letter-spacing: 0.02em;
+        }
+
+        .btn-new {
+            background: #1f6feb;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            padding: 8px 18px;
+            font-size: 14px;
+            font-family: inherit;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .btn-new:hover { background: #388bfd; }
+
+        .maps-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 20px;
+            padding: 32px;
+        }
+
+        .card {
+            background: #161b22;
+            border: 1.5px solid #30363d;
+            border-radius: 10px;
+            padding: 20px 20px 16px;
+            cursor: pointer;
+            transition: border-color 0.15s, box-shadow 0.15s;
+            position: relative;
+            min-height: 120px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .card:hover {
+            border-color: #388bfd;
+            box-shadow: 0 0 0 3px rgba(56, 139, 253, 0.12),
+                        0 8px 20px rgba(0,0,0,0.5);
+        }
+
+        .card-icon {
+            font-size: 22px;
+            line-height: 1;
+            margin-bottom: 4px;
+            opacity: 0.7;
+        }
+
+        .card-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: #e6edf3;
+            word-break: break-all;
+            flex: 1;
+            outline: none;
+            border-radius: 3px;
+            padding: 1px 3px;
+            margin: -1px -3px;
+            line-height: 1.4;
+        }
+        .card-title[contenteditable="true"] {
+            cursor: text;
+            background: #21262d;
+            box-shadow: 0 0 0 2px #388bfd;
+        }
+
+        .card-date {
+            font-size: 12px;
+            color: #484f58;
+            margin-top: auto;
+        }
+
+        .card-actions {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            display: flex;
+            gap: 4px;
+            opacity: 0;
+            transition: opacity 0.15s;
+        }
+        .card:hover .card-actions { opacity: 1; }
+
+        .card-btn {
+            background: #21262d;
+            border: 1px solid #30363d;
+            border-radius: 4px;
+            color: #8b949e;
+            font-size: 12px;
+            cursor: pointer;
+            padding: 3px 8px;
+            font-family: inherit;
+            transition: color 0.1s, border-color 0.1s;
+        }
+        .card-btn:hover { color: #e6edf3; border-color: #6e7681; }
+        .card-btn.del:hover { color: #f85149; border-color: #f85149; }
+
+        .empty-state {
+            grid-column: 1 / -1;
+            text-align: center;
+            padding: 100px 20px;
+            color: #484f58;
+        }
+        .empty-state .empty-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.4; }
+        .empty-state p { font-size: 15px; margin-bottom: 6px; color: #6e7681; }
+        .empty-state small { font-size: 13px; }
+
+        .confirm-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+        }
+        .confirm-box {
+            background: #161b22;
+            border: 1.5px solid #30363d;
+            border-radius: 10px;
+            padding: 28px 32px;
+            min-width: 280px;
+            text-align: center;
+        }
+        .confirm-box p { font-size: 14px; color: #c9d1d9; margin-bottom: 20px; }
+        .confirm-box strong { color: #e6edf3; }
+        .confirm-actions { display: flex; gap: 10px; justify-content: center; }
+        .btn-cancel {
+            background: #21262d;
+            color: #c9d1d9;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            padding: 7px 18px;
+            font-size: 14px;
+            font-family: inherit;
+            cursor: pointer;
+        }
+        .btn-cancel:hover { border-color: #6e7681; }
+        .btn-delete {
+            background: #da3633;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            padding: 7px 18px;
+            font-size: 14px;
+            font-family: inherit;
+            cursor: pointer;
+        }
+        .btn-delete:hover { background: #f85149; }
+    </style>
+</head>
+<body>
+<header>
+    <span class="header-title">マインドマップ</span>
+    <button class="btn-new" onclick="createMap()">+ 新規作成</button>
+</header>
+<div class="maps-grid" id="grid"></div>
+
+<script>
+function getList() {
+    try { return JSON.parse(localStorage.getItem('mindmap_list') || '[]'); } catch { return []; }
+}
+function setList(list) {
+    localStorage.setItem('mindmap_list', JSON.stringify(list));
+}
+
+function createMap() {
+    const id  = 'map_' + Date.now();
+    const now = new Date().toISOString();
+    const list = getList();
+    list.unshift({ id, name: '無題のマップ', createdAt: now, updatedAt: now });
+    setList(list);
+    location.href = 'mindmap.html?id=' + id;
+}
+
+function confirmDelete(id, name) {
+    const overlay = document.createElement('div');
+    overlay.className = 'confirm-overlay';
+    overlay.innerHTML = `
+        <div class="confirm-box">
+            <p><strong>${escHtml(name)}</strong><br>を削除しますか？この操作は取り消せません。</p>
+            <div class="confirm-actions">
+                <button class="btn-cancel" id="btn-cancel">キャンセル</button>
+                <button class="btn-delete" id="btn-delete">削除</button>
+            </div>
+        </div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelector('#btn-cancel').onclick = () => overlay.remove();
+    overlay.querySelector('#btn-delete').onclick = () => {
+        overlay.remove();
+        const list = getList().filter(m => m.id !== id);
+        setList(list);
+        localStorage.removeItem('mindmap_data_' + id);
+        render();
+    };
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+}
+
+function startRename(id, titleEl, e) {
+    e.stopPropagation();
+    if (titleEl.contentEditable === 'true') return;
+    const original = titleEl.textContent;
+    titleEl.contentEditable = 'true';
+    titleEl.focus();
+    const range = document.createRange();
+    range.selectNodeContents(titleEl);
+    getSelection().removeAllRanges();
+    getSelection().addRange(range);
+
+    function commit() {
+        titleEl.contentEditable = 'false';
+        const newName = titleEl.textContent.trim() || '無題のマップ';
+        titleEl.textContent = newName;
+        const list = getList();
+        const entry = list.find(m => m.id === id);
+        if (entry) { entry.name = newName; setList(list); }
+        cleanup();
+    }
+    function cancel() {
+        titleEl.contentEditable = 'false';
+        titleEl.textContent = original;
+        cleanup();
+    }
+    function onKey(e) {
+        if (e.key === 'Enter')  { e.preventDefault(); commit(); }
+        if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+    }
+    function cleanup() {
+        titleEl.removeEventListener('blur', commit);
+        titleEl.removeEventListener('keydown', onKey);
+    }
+    titleEl.addEventListener('blur', commit);
+    titleEl.addEventListener('keydown', onKey);
+}
+
+function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function formatDate(iso) {
+    const d    = new Date(iso);
+    const now  = new Date();
+    const diff = (now - d) / 1000;
+    if (diff < 60)       return 'たった今';
+    if (diff < 3600)     return Math.floor(diff / 60) + '分前';
+    if (diff < 86400)    return Math.floor(diff / 3600) + '時間前';
+    if (diff < 86400*7)  return Math.floor(diff / 86400) + '日前';
+    return d.toLocaleDateString('ja-JP', { month: 'short', day: 'numeric' });
+}
+
+function render() {
+    const list = getList();
+    const grid = document.getElementById('grid');
+    grid.innerHTML = '';
+
+    if (!list.length) {
+        grid.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-icon">🧠</div>
+                <p>まだマップがありません</p>
+                <small>「新規作成」ボタンで最初のマップを作ろう</small>
+            </div>`;
+        return;
+    }
+
+    list.forEach(map => {
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.onclick = () => { location.href = 'mindmap.html?id=' + map.id; };
+
+        const icon = document.createElement('div');
+        icon.className = 'card-icon';
+        icon.textContent = '🗺';
+
+        const title = document.createElement('div');
+        title.className = 'card-title';
+        title.textContent = map.name;
+
+        const date = document.createElement('div');
+        date.className = 'card-date';
+        date.textContent = '更新 ' + formatDate(map.updatedAt);
+
+        const actions = document.createElement('div');
+        actions.className = 'card-actions';
+
+        const renameBtn = document.createElement('button');
+        renameBtn.className = 'card-btn';
+        renameBtn.textContent = '✏';
+        renameBtn.title = '名前を変更';
+        renameBtn.onclick = e => startRename(map.id, title, e);
+
+        const delBtn = document.createElement('button');
+        delBtn.className = 'card-btn del';
+        delBtn.textContent = '✕';
+        delBtn.title = '削除';
+        delBtn.onclick = e => { e.stopPropagation(); confirmDelete(map.id, map.name); };
+
+        actions.append(renameBtn, delBtn);
+        card.append(icon, title, date, actions);
+        grid.appendChild(card);
+    });
+}
+
+render();
+</script>
+</body>
+</html>

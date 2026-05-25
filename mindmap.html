@@ -1,0 +1,906 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>マインドマップ</title>
+    <style>
+        *, *::before, *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background: #0d1117;
+            font-family: 'Segoe UI', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', sans-serif;
+            height: 100vh;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        #topbar {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            height: 44px;
+            background: #161b22;
+            border-bottom: 1px solid #21262d;
+            display: flex;
+            align-items: center;
+            padding: 0 16px;
+            gap: 12px;
+            z-index: 200;
+        }
+
+        #back-btn {
+            color: #8b949e;
+            text-decoration: none;
+            font-size: 13px;
+            padding: 4px 10px;
+            border-radius: 5px;
+            transition: color 0.15s, background 0.15s;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        #back-btn:hover { color: #e6edf3; background: #21262d; }
+
+        #topbar-center {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            min-width: 0;
+        }
+
+        #map-name {
+            font-size: 14px;
+            font-weight: 600;
+            color: #e6edf3;
+            cursor: pointer;
+            border-radius: 4px;
+            padding: 3px 10px;
+            outline: none;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 360px;
+        }
+        #map-name:hover { background: #21262d; }
+        #map-name[contenteditable="true"] { background: #21262d; cursor: text; box-shadow: 0 0 0 2px #388bfd; }
+
+        #save-status {
+            font-size: 12px;
+            color: #484f58;
+            width: 50px;
+            flex-shrink: 0;
+            text-align: right;
+            font-family: monospace;
+        }
+
+        #app {
+            width: 100vw;
+            height: calc(100vh - 44px);
+            margin-top: 44px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Lines drawn in screen space — always visible, never clipped */
+        svg#lines {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        /* Zoomable / pannable container for nodes only */
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            transform-origin: 0 0;
+        }
+
+        .node {
+            position: absolute;
+            transform: translate(-50%, -50%);
+            background: #161b22;
+            border: 1.5px solid #30363d;
+            border-radius: 8px;
+            padding: 8px 18px;
+            cursor: grab;
+            transition: border-color 0.15s, box-shadow 0.15s;
+        }
+
+        .node.root-node {
+            background: #0d2137;
+            border: 2px solid #1f6feb;
+            cursor: default;
+        }
+
+        .node.selected {
+            border-color: #388bfd;
+            box-shadow: 0 0 0 3px rgba(56, 139, 253, 0.2),
+                        0 8px 24px rgba(0, 0, 0, 0.6);
+        }
+
+        .node.editing {
+            border-color: #58a6ff;
+            box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.25),
+                        0 8px 24px rgba(0, 0, 0, 0.6);
+        }
+
+        .node.dragging {
+            cursor: grabbing !important;
+            opacity: 0.88;
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.85);
+            z-index: 1000;
+            transition: none;
+        }
+
+        .node.snap-target {
+            border-color: #58a6ff;
+            box-shadow: 0 0 0 4px rgba(88, 166, 255, 0.35),
+                        0 0 20px rgba(88, 166, 255, 0.25);
+        }
+
+        .node input {
+            background: transparent;
+            border: none;
+            outline: none;
+            color: #c9d1d9;
+            font-size: 14px;
+            font-family: inherit;
+            text-align: center;
+            cursor: inherit;
+            pointer-events: none;
+            display: block;
+            width: 100%;
+            min-width: 60px;
+            caret-color: #58a6ff;
+        }
+
+        .node.root-node input {
+            color: #58a6ff;
+            font-weight: 600;
+            font-size: 15px;
+        }
+
+        .node.selected input,
+        .node.editing input {
+            pointer-events: auto;
+            cursor: text;
+        }
+
+        .node.dragging input { pointer-events: none; }
+
+        body.is-dragging,
+        body.is-panning  { cursor: grabbing !important; }
+
+        #hint {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 4px;
+            align-items: center;
+            color: #484f58;
+            font-size: 12px;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+
+        .key {
+            display: inline-block;
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-bottom-width: 2px;
+            border-radius: 4px;
+            padding: 1px 7px;
+            color: #6e7681;
+            font-size: 11px;
+            font-family: monospace;
+        }
+
+        .hint-sep { margin: 0 5px; color: #21262d; }
+
+        #zoom-level {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            color: #484f58;
+            font-size: 12px;
+            font-family: monospace;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+<div id="topbar">
+    <a href="index.html" id="back-btn">← 戻る</a>
+    <div id="topbar-center">
+        <span id="map-name"></span>
+    </div>
+    <span id="save-status"></span>
+</div>
+<div id="app">
+    <!-- SVG lives outside #canvas so it's never clipped -->
+    <svg id="lines"></svg>
+    <div id="canvas"></div>
+</div>
+<div id="hint">
+    <span class="key">Enter</span>&thinsp;兄弟ノード
+    <span class="hint-sep">|</span>
+    <span class="key">Tab</span>&thinsp;子ノード
+    <span class="hint-sep">|</span>
+    <span class="key">↑↓←→</span>&thinsp;移動
+    <span class="hint-sep">|</span>
+    <span class="key">F2</span>&thinsp;編集
+    <span class="hint-sep">|</span>
+    <span class="key">Del</span>&thinsp;削除
+    <span class="hint-sep">|</span>
+    <span class="key">Esc</span>&thinsp;元に戻す
+    <span class="hint-sep">|</span>
+    <span class="key">⇧⌘Z</span>&thinsp;やり直し
+    <span class="hint-sep">|</span>
+    <span class="key">2本指スワイプ</span>&thinsp;パン
+    <span class="hint-sep">|</span>
+    <span class="key">ピンチ</span>&thinsp;ズーム
+</div>
+<div id="zoom-level">100%</div>
+
+<script>
+const V_GAP     = 64;
+const H_GAP     = 220;
+const SNAP_DIST = 90; // この距離（canvas px）以内のノードに吸着
+
+let nodes      = {};
+let selected   = null;
+let cnt        = 0;
+let drag       = null;
+let pan        = null;
+let view       = { x: 0, y: 0, scale: 1 };
+let undoStack  = [];
+let redoStack  = [];
+const MAX_UNDO = 30;
+
+const app         = document.getElementById('app');
+const canvasEl    = document.getElementById('canvas');
+const svgEl       = document.getElementById('lines');
+const zoomLevelEl = document.getElementById('zoom-level');
+
+// ── Undo ─────────────────────────────────────────────────────────────────────
+
+function currentSnapshot() {
+    const snap = { cnt, nodes: {} };
+    Object.values(nodes).forEach(n => {
+        snap.nodes[n.id] = { ...n, children: [...n.children] };
+    });
+    return snap;
+}
+
+function saveSnapshot() {
+    undoStack.push(currentSnapshot());
+    if (undoStack.length > MAX_UNDO) undoStack.shift();
+    redoStack = []; // 新しい操作でredo履歴を破棄
+    scheduleSave();
+}
+
+function restoreSnapshot(snap) {
+    canvasEl.querySelectorAll('.node').forEach(e => e.remove());
+    svgEl.innerHTML = '';
+    cnt   = snap.cnt;
+    nodes = {};
+    Object.values(snap.nodes).forEach(n => {
+        nodes[n.id] = { ...n, children: [...n.children] };
+    });
+    const order = [];
+    (function walk(id) { order.push(id); nodes[id].children.forEach(walk); })('root');
+    order.forEach(mountNode);
+    select(null);
+    updateLines();
+    canvasEl.style.transition = 'opacity 0.1s';
+    canvasEl.style.opacity    = '0.5';
+    setTimeout(() => { canvasEl.style.opacity = '1'; canvasEl.style.transition = ''; }, 120);
+    scheduleSave();
+}
+
+function undo() {
+    if (!undoStack.length) return;
+    redoStack.push(currentSnapshot());
+    restoreSnapshot(undoStack.pop());
+}
+
+function redo() {
+    if (!redoStack.length) return;
+    undoStack.push(currentSnapshot());
+    restoreSnapshot(redoStack.pop());
+}
+
+// ── View helpers ──────────────────────────────────────────────────────────────
+
+function applyView() {
+    canvasEl.style.transform = `translate(${view.x}px,${view.y}px) scale(${view.scale})`;
+    zoomLevelEl.textContent  = Math.round(view.scale * 100) + '%';
+    updateLines(); // lines are in screen space — must redraw on every view change
+}
+
+// Canvas → screen coordinates
+function c2s(cx, cy) {
+    return [cx * view.scale + view.x, cy * view.scale + view.y];
+}
+
+// Screen → canvas coordinates
+function s2c(sx, sy) {
+    return [(sx - view.x) / view.scale, (sy - view.y) / view.scale];
+}
+
+// ── Misc helpers ──────────────────────────────────────────────────────────────
+
+function uid()   { return 'n' + (++cnt); }
+function el(id)  { return document.getElementById('el-' + id); }
+function inp(id) { return el(id)?.querySelector('input'); }
+
+function sizeInput(input) {
+    const isRoot = input.closest('.root-node') !== null;
+    const ghost  = document.createElement('span');
+    ghost.style.cssText    = 'position:absolute;visibility:hidden;white-space:pre;pointer-events:none';
+    ghost.style.fontSize   = isRoot ? '15px' : '14px';
+    ghost.style.fontFamily = getComputedStyle(document.body).fontFamily;
+    ghost.textContent      = input.value || 'あ';
+    document.body.appendChild(ghost);
+    input.style.width = Math.max(60, ghost.offsetWidth + 8) + 'px';
+    ghost.remove();
+}
+
+// ── Mount node DOM ────────────────────────────────────────────────────────────
+
+function mountNode(id) {
+    const n   = nodes[id];
+    const div = document.createElement('div');
+    div.id        = 'el-' + id;
+    div.className = 'node' + (id === 'root' ? ' root-node' : '');
+    div.style.left = n.x + 'px';
+    div.style.top  = n.y + 'px';
+
+    const input = document.createElement('input');
+    input.type         = 'text';
+    input.value        = n.text;
+    input.spellcheck   = false;
+    input.autocomplete = 'off';
+    input.setAttribute('readonly', '');
+
+    input.addEventListener('input', () => {
+        n.text = input.value;
+        sizeInput(input);
+        updateLines();
+        scheduleSave();
+    });
+    input.addEventListener('keydown', e => handleKey(e, id));
+    input.addEventListener('blur', () => { stopEdit(id); applyLayout(); });
+
+    div.addEventListener('mousedown', e => {
+        e.stopPropagation();
+        const wasSelected = (selected === id);
+        if (!wasSelected) select(id);
+
+        if (id !== 'root') {
+            const [cx, cy] = s2c(e.clientX, e.clientY);
+            drag = { id, ox: cx - n.x, oy: cy - n.y,
+                     sx: n.x, sy: n.y, moved: false, wasSelected };
+        } else {
+            drag = { id: 'root', moved: false, wasSelected };
+        }
+    });
+
+    div.appendChild(input);
+    canvasEl.appendChild(div);
+    sizeInput(input);
+}
+
+// ── Selection & editing ───────────────────────────────────────────────────────
+
+function select(id) {
+    if (selected) {
+        el(selected)?.classList.remove('selected');
+        stopEdit(selected);
+    }
+    selected = id;
+    if (!id) return;
+    el(id)?.classList.add('selected');
+    inp(id)?.focus();
+}
+
+function startEdit(id) {
+    const i = inp(id);
+    if (!i) return;
+    i.removeAttribute('readonly');
+    el(id)?.classList.remove('selected');
+    el(id)?.classList.add('editing');
+    i.focus();
+    i.select();
+}
+
+function stopEdit(id) {
+    const i = inp(id);
+    if (!i) return;
+    i.setAttribute('readonly', '');
+    const div = el(id);
+    if (!div) return;
+    div.classList.remove('editing');
+    if (selected === id) div.classList.add('selected');
+}
+
+function isEditing(id) { return !(inp(id)?.hasAttribute('readonly')); }
+
+// ── Layout ────────────────────────────────────────────────────────────────────
+
+function subtreeH(id) {
+    const n = nodes[id];
+    return n.children.length === 0
+        ? V_GAP
+        : n.children.reduce((s, c) => s + subtreeH(c), 0);
+}
+
+function layoutNode(id) {
+    const n = nodes[id];
+    if (!n.children.length) return;
+
+    const pEl      = el(n.id);
+    const pHalfW   = pEl ? pEl.offsetWidth / 2 : 60;
+    const MARGIN   = 40; // 親右端 → 子左端の隙間
+    const leftEdge = n.x + pHalfW + MARGIN; // 全兄弟の左端を揃える基準
+
+    const heights = n.children.map(subtreeH);
+    const total   = heights.reduce((s, h) => s + h, 0);
+    let y = n.y - total / 2;
+
+    n.children.forEach((cid, i) => {
+        const cEl    = el(cid);
+        const cHalfW = cEl ? cEl.offsetWidth / 2 : 60;
+        nodes[cid].x = leftEdge + cHalfW; // 左端固定、中心は幅に応じてずれる
+        nodes[cid].y = y + heights[i] / 2;
+        y += heights[i];
+        layoutNode(cid);
+    });
+}
+
+function applyLayout() {
+    layoutNode('root');
+    Object.values(nodes).forEach(n => {
+        const div = el(n.id);
+        if (div) { div.style.left = n.x + 'px'; div.style.top = n.y + 'px'; }
+    });
+    updateLines();
+}
+
+// ── SVG lines (screen coordinates) ───────────────────────────────────────────
+
+function updateLines() {
+    svgEl.innerHTML = '';
+    Object.values(nodes).forEach(n => {
+        if (!n.parentId) return;
+        const p   = nodes[n.parentId];
+        const pEl = el(p.id);
+        const nEl = el(n.id);
+        if (!pEl || !nEl) return;
+
+        // Canvas-space endpoints
+        const cx1 = p.x + pEl.offsetWidth  / 2;
+        const cy1 = p.y;
+        const cx2 = n.x - nEl.offsetWidth  / 2;
+        const cy2 = n.y;
+        const cmx = (cx1 + cx2) / 2;
+
+        // Convert to screen space
+        const [x1, y1]   = c2s(cx1, cy1);
+        const [x2, y2]   = c2s(cx2, cy2);
+        const [cp1x, cp1y] = c2s(cmx, cy1);
+        const [cp2x, cp2y] = c2s(cmx, cy2);
+
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d',              `M${x1},${y1} C${cp1x},${cp1y} ${cp2x},${cp2y} ${x2},${y2}`);
+        path.setAttribute('fill',           'none');
+        path.setAttribute('stroke',         n.parentId === 'root' ? '#1f6feb' : '#30363d');
+        path.setAttribute('stroke-width',   n.parentId === 'root' ? '2'       : '1.5');
+        path.setAttribute('stroke-opacity', '0.75');
+        path.setAttribute('stroke-linecap', 'round');
+        svgEl.appendChild(path);
+    });
+}
+
+// ── Add / delete ──────────────────────────────────────────────────────────────
+
+function addTo(parentId, afterSiblingId) {
+    saveSnapshot();
+    const id     = uid();
+    const parent = nodes[parentId];
+    nodes[id] = { id, text: '', x: parent.x + H_GAP, y: parent.y, parentId, children: [] };
+
+    if (afterSiblingId !== undefined) {
+        const idx = parent.children.indexOf(afterSiblingId);
+        parent.children.splice(idx + 1, 0, id);
+    } else {
+        parent.children.push(id);
+    }
+
+    mountNode(id);
+    applyLayout();
+    select(id);
+    startEdit(id);
+}
+
+function addSibling(id) {
+    if (!nodes[id].parentId) addTo('root');
+    else                     addTo(nodes[id].parentId, id);
+}
+
+function addChild(id) { addTo(id); }
+
+function deleteNode(id) {
+    if (id === 'root') return;
+    saveSnapshot();
+    const n      = nodes[id];
+    const parent = nodes[n.parentId];
+    const idx    = parent.children.indexOf(id);
+    parent.children.splice(idx, 1);
+
+    (function purge(nid) {
+        nodes[nid].children.forEach(purge);
+        el(nid)?.remove();
+        delete nodes[nid];
+    })(id);
+
+    applyLayout();
+    const nextId = parent.children[Math.max(0, idx - 1)] ?? n.parentId;
+    if (nodes[nextId]) select(nextId);
+}
+
+// ── Re-parent helpers ─────────────────────────────────────────────────────────
+
+function getDescendants(id) {
+    const set = new Set();
+    (function walk(nid) {
+        nodes[nid].children.forEach(c => { set.add(c); walk(c); });
+    })(id);
+    return set;
+}
+
+function findSnapTarget(dragId) {
+    const dragged  = nodes[dragId];
+    const excluded = new Set([dragId, ...getDescendants(dragId)]);
+    let nearest = null, minDist = SNAP_DIST;
+    Object.values(nodes).forEach(n => {
+        if (excluded.has(n.id)) return;
+        const d = Math.hypot(n.x - dragged.x, n.y - dragged.y);
+        if (d < minDist) { minDist = d; nearest = n.id; }
+    });
+    return nearest;
+}
+
+function drawDragLine() {
+    svgEl.querySelectorAll('.drag-line').forEach(p => p.remove());
+    if (!drag?.moved || !drag.snapTarget) return;
+    const src = nodes[drag.snapTarget];
+    const dst = nodes[drag.id];
+    const srcEl = el(drag.snapTarget);
+    const dstEl = el(drag.id);
+    if (!src || !dst || !srcEl || !dstEl) return;
+
+    const [x1, y1] = c2s(src.x + srcEl.offsetWidth / 2, src.y);
+    const [x2, y2] = c2s(dst.x - dstEl.offsetWidth / 2, dst.y);
+    const mx = (x1 + x2) / 2;
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d',              `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`);
+    path.setAttribute('fill',          'none');
+    path.setAttribute('stroke',        '#58a6ff');
+    path.setAttribute('stroke-width',  '2');
+    path.setAttribute('stroke-dasharray', '7,4');
+    path.setAttribute('stroke-opacity', '0.9');
+    path.setAttribute('class',         'drag-line');
+    svgEl.appendChild(path);
+}
+
+function clearSnapTarget() {
+    if (drag?.snapTarget) {
+        el(drag.snapTarget)?.classList.remove('snap-target');
+        drag.snapTarget = null;
+    }
+    svgEl.querySelectorAll('.drag-line').forEach(p => p.remove());
+}
+
+// ── Drag node ─────────────────────────────────────────────────────────────────
+
+function moveSubtree(id, dx, dy) {
+    const n = nodes[id];
+    n.x += dx; n.y += dy;
+    const div = el(id);
+    if (div) { div.style.left = n.x + 'px'; div.style.top = n.y + 'px'; }
+    n.children.forEach(cid => moveSubtree(cid, dx, dy));
+}
+
+// ── Global mouse events ───────────────────────────────────────────────────────
+
+document.addEventListener('mousemove', e => {
+    if (pan) {
+        view.x = pan.sx + (e.clientX - pan.mx);
+        view.y = pan.sy + (e.clientY - pan.my);
+        applyView();
+    }
+
+    if (!drag || drag.id === 'root') return;
+    const [cx, cy] = s2c(e.clientX, e.clientY);
+    const newX = cx - drag.ox;
+    const newY = cy - drag.oy;
+
+    if (!drag.moved) {
+        if (Math.hypot(newX - drag.sx, newY - drag.sy) < 5) return;
+        drag.moved = true;
+        el(drag.id)?.classList.add('dragging');
+        document.body.classList.add('is-dragging');
+    }
+
+    const n = nodes[drag.id];
+    moveSubtree(drag.id, newX - n.x, newY - n.y);
+    updateLines();
+
+    // スナップターゲット検出
+    const nearest = findSnapTarget(drag.id);
+    if (nearest !== drag.snapTarget) {
+        if (drag.snapTarget) el(drag.snapTarget)?.classList.remove('snap-target');
+        drag.snapTarget = nearest;
+        if (drag.snapTarget) el(drag.snapTarget)?.classList.add('snap-target');
+    }
+    drawDragLine();
+});
+
+document.addEventListener('mouseup', () => {
+    pan = null;
+    document.body.classList.remove('is-panning');
+
+    if (!drag) return;
+    const { id, moved, wasSelected, snapTarget } = drag;
+    clearSnapTarget();
+    drag = null;
+    el(id)?.classList.remove('dragging');
+    document.body.classList.remove('is-dragging');
+
+    if (!moved && wasSelected && !isEditing(id)) {
+        startEdit(id);
+        return;
+    }
+
+    // 別ノードにスナップ → 親子関係を変更
+    if (moved && snapTarget && snapTarget !== nodes[id]?.parentId) {
+        saveSnapshot();
+        const oldParentId = nodes[id].parentId;
+        if (oldParentId) {
+            const op = nodes[oldParentId];
+            op.children.splice(op.children.indexOf(id), 1);
+        }
+        nodes[id].parentId = snapTarget;
+        nodes[snapTarget].children.push(id);
+        applyLayout();
+    }
+});
+
+// ── Wheel: 2-finger scroll = pan, pinch (ctrlKey) = zoom ─────────────────────
+
+app.addEventListener('wheel', e => {
+    e.preventDefault();
+
+    if (e.ctrlKey || e.metaKey) {
+        // Pinch to zoom (trackpad) or Ctrl/Cmd + scroll (mouse)
+        const raw      = e.deltaMode === 1 ? e.deltaY * 30 : e.deltaY;
+        const factor   = Math.exp(-raw * 0.01);
+        const newScale = Math.min(4, Math.max(0.1, view.scale * factor));
+        const rect     = app.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+
+        view.x     = mx - (mx - view.x) * (newScale / view.scale);
+        view.y     = my - (my - view.y) * (newScale / view.scale);
+        view.scale = newScale;
+    } else {
+        // 2-finger scroll = pan
+        view.x -= e.deltaX;
+        view.y -= e.deltaY;
+    }
+
+    applyView();
+}, { passive: false });
+
+// ── Background drag = pan (mouse users) ──────────────────────────────────────
+
+app.addEventListener('mousedown', e => {
+    if (e.target === app || e.target === canvasEl || e.target === svgEl) {
+        select(null);
+        pan = { mx: e.clientX, my: e.clientY, sx: view.x, sy: view.y };
+        document.body.classList.add('is-panning');
+    }
+});
+
+// ── Keyboard ──────────────────────────────────────────────────────────────────
+
+function handleKey(e, id) {
+    if (isEditing(id)) {
+        // e.isComposing=true の間はIME変換中 → Enter/Tab でノード操作しない
+        if      (e.key === 'Enter'  && !e.isComposing) { e.preventDefault(); stopEdit(id); addSibling(id); }
+        else if (e.key === 'Tab'    && !e.isComposing) { e.preventDefault(); stopEdit(id); addChild(id);   }
+        else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopEdit(id); }
+        else if ((e.key === 'Backspace' || e.key === 'Delete') && nodes[id].text === '' && id !== 'root') {
+            e.preventDefault(); stopEdit(id); deleteNode(id);
+        }
+        return;
+    }
+
+    const n = nodes[id];
+    switch (e.key) {
+        case 'Enter':
+            if (e.isComposing) break;
+            e.preventDefault(); addSibling(id); break;
+        case 'Tab':       e.preventDefault(); addChild(id);   break;
+        case 'F2':        e.preventDefault(); startEdit(id);  break;
+        case 'Delete':
+        case 'Backspace': e.preventDefault(); deleteNode(id); break;
+
+        case 'ArrowUp': {
+            e.preventDefault();
+            if (n.parentId) {
+                const sibs = nodes[n.parentId].children;
+                const i = sibs.indexOf(id);
+                select(i > 0 ? sibs[i - 1] : n.parentId);
+            }
+            break;
+        }
+        case 'ArrowDown': {
+            e.preventDefault();
+            if (n.parentId) {
+                const sibs = nodes[n.parentId].children;
+                const i = sibs.indexOf(id);
+                if (i < sibs.length - 1) select(sibs[i + 1]);
+            } else if (n.children.length) {
+                select(n.children[0]);
+            }
+            break;
+        }
+        case 'ArrowRight':
+            e.preventDefault();
+            if (n.children.length) select(n.children[0]);
+            break;
+        case 'ArrowLeft':
+            e.preventDefault();
+            if (n.parentId) select(n.parentId);
+            break;
+
+        default:
+            if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+                const i = inp(id);
+                if (i) {
+                    i.removeAttribute('readonly');
+                    el(id)?.classList.remove('selected');
+                    el(id)?.classList.add('editing');
+                    i.value = e.key;
+                    n.text  = e.key;
+                    sizeInput(i);
+                    i.focus();
+                    i.setSelectionRange(1, 1);
+                    e.preventDefault();
+                }
+            }
+    }
+}
+
+// ── Global undo (Esc 非編集時 / Cmd+Z) ───────────────────────────────────────
+
+document.addEventListener('keydown', e => {
+    const editing = !!document.querySelector('.node.editing');
+    if (e.key === 'Escape' && !editing) {
+        e.preventDefault();
+        undo();
+        return;
+    }
+    if ((e.key === 'z' || e.key === 'Z') && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+        return;
+    }
+    if ((e.key === 'z' || e.key === 'Z') && (e.ctrlKey || e.metaKey) && e.shiftKey) {
+        e.preventDefault();
+        redo();
+        return;
+    }
+});
+
+// ── Persistence ───────────────────────────────────────────────────────────────
+
+const mapId = new URLSearchParams(location.search).get('id');
+if (!mapId) location.replace('index.html');
+
+let mapName   = '無題のマップ';
+let saveTimer = null;
+
+function scheduleSave() {
+    if (!mapId) return;
+    clearTimeout(saveTimer);
+    const ss = document.getElementById('save-status');
+    if (ss) ss.textContent = '...';
+    saveTimer = setTimeout(persistMap, 600);
+}
+
+function persistMap() {
+    if (!mapId) return;
+    const data = { name: mapName, cnt, nodes: {} };
+    Object.values(nodes).forEach(n => {
+        data.nodes[n.id] = { ...n, children: [...n.children] };
+    });
+    localStorage.setItem('mindmap_data_' + mapId, JSON.stringify(data));
+    try {
+        const list = JSON.parse(localStorage.getItem('mindmap_list') || '[]');
+        const entry = list.find(m => m.id === mapId);
+        if (entry) { entry.name = mapName; entry.updatedAt = new Date().toISOString(); }
+        localStorage.setItem('mindmap_list', JSON.stringify(list));
+    } catch {}
+    const ss = document.getElementById('save-status');
+    if (ss) { ss.textContent = '✓'; setTimeout(() => { if (ss) ss.textContent = ''; }, 1500); }
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+
+window.addEventListener('resize', applyLayout);
+
+const W     = window.innerWidth;
+const H     = window.innerHeight;
+const saved = (() => {
+    try { return mapId ? JSON.parse(localStorage.getItem('mindmap_data_' + mapId)) : null; } catch { return null; }
+})();
+
+if (saved?.nodes?.root) {
+    mapName = saved.name || '無題のマップ';
+    cnt     = saved.cnt  || 0;
+    Object.values(saved.nodes).forEach(n => {
+        nodes[n.id] = { ...n, children: [...n.children] };
+    });
+    const order = [];
+    (function walk(id) { order.push(id); nodes[id].children.forEach(walk); })('root');
+    order.forEach(mountNode);
+} else {
+    nodes['root'] = {
+        id: 'root', text: 'メインテーマ',
+        x: Math.round(W * 0.2), y: Math.round(H / 2),
+        parentId: null, children: []
+    };
+    mountNode('root');
+}
+
+const mapNameEl = document.getElementById('map-name');
+if (mapNameEl) {
+    mapNameEl.textContent = mapName;
+    mapNameEl.addEventListener('click', () => {
+        if (mapNameEl.contentEditable === 'true') return;
+        mapNameEl.contentEditable = 'true';
+        mapNameEl.focus();
+        const range = document.createRange();
+        range.selectNodeContents(mapNameEl);
+        getSelection().removeAllRanges();
+        getSelection().addRange(range);
+    });
+    mapNameEl.addEventListener('blur', () => {
+        mapNameEl.contentEditable = 'false';
+        const newName = mapNameEl.textContent.trim() || '無題のマップ';
+        mapName = newName;
+        mapNameEl.textContent = mapName;
+        scheduleSave();
+    });
+    mapNameEl.addEventListener('keydown', e => {
+        if (e.key === 'Enter')  { e.preventDefault(); mapNameEl.blur(); }
+        if (e.key === 'Escape') { e.stopPropagation(); mapNameEl.contentEditable = 'false'; mapNameEl.textContent = mapName; }
+    });
+}
+
+select('root');
+applyView();
+</script>
+</body>
+</html>
