@@ -901,15 +901,22 @@ function handleKey(e, id) {
             if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
                 const i = inp(id);
                 if (i) {
+                    const char = e.key;        // keydownのe.keyはShift状態を正しく含む
+                    e.preventDefault();        // ブラウザのデフォルト入力を阻止
                     i.removeAttribute('readonly');
                     el(id)?.classList.remove('selected');
                     el(id)?.classList.add('editing');
-                    i.value = '';
-                    n.text  = '';
+                    i.value = char;
+                    n.text  = char;
                     sizeInput(i);
-                    i.focus();
-                    // e.preventDefault() は呼ばない → ブラウザが自然に文字を入力する
-                    // これにより大文字/小文字が正しく扱われる
+                    // focus()をsetTimeout(0)で遅延させることで、macOSが
+                    // このキーを新フォーカス先に「再送信」するのを防ぐ
+                    setTimeout(() => {
+                        if (i.isConnected) {
+                            i.focus();
+                            i.setSelectionRange(char.length, char.length);
+                        }
+                    }, 0);
                 }
             }
     }
