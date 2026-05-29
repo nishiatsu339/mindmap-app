@@ -28,8 +28,6 @@
             --root-bg:     #0d2137;
             --line-root:   #1f6feb;
             --line-child:  #30363d;
-            --selected-bg: #1f6feb;
-            --selected-fg: #ffffff;
         }
 
         [data-theme="light"] {
@@ -47,8 +45,6 @@
             --root-bg:     #dbeafe;
             --line-root:   #0969da;
             --line-child:  #b0b7c0;
-            --selected-bg: #0969da;
-            --selected-fg: #ffffff;
         }
 
         body {
@@ -175,13 +171,15 @@
         }
 
         .node.selected {
-            background: var(--selected-bg);
-            border-color: var(--selected-bg);
+            border-color: var(--accent2);
+            box-shadow: 0 0 0 3px rgba(56, 139, 253, 0.2),
+                        0 8px 24px rgba(0, 0, 0, 0.4);
         }
 
         .node.editing {
             border-color: var(--accent3);
-            border-width: 2px;
+            box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.25),
+                        0 8px 24px rgba(0, 0, 0, 0.4);
         }
 
         .node.dragging {
@@ -224,11 +222,6 @@
         .node.editing input {
             pointer-events: auto;
             cursor: text;
-        }
-
-        .node.selected input {
-            color: var(--selected-fg);
-            caret-color: var(--selected-fg);
         }
 
         .node.dragging input { pointer-events: none; }
@@ -442,20 +435,16 @@ function mountNode(id) {
 
     div.addEventListener('mousedown', e => {
         e.stopPropagation();
-        if (selected !== id) select(id);
+        const wasSelected = (selected === id);
+        if (!wasSelected) select(id);
 
         if (id !== 'root') {
             const [cx, cy] = s2c(e.clientX, e.clientY);
             drag = { id, ox: cx - n.x, oy: cy - n.y,
-                     sx: n.x, sy: n.y, moved: false };
+                     sx: n.x, sy: n.y, moved: false, wasSelected };
         } else {
-            drag = { id: 'root', moved: false };
+            drag = { id: 'root', moved: false, wasSelected };
         }
-    });
-
-    div.addEventListener('dblclick', e => {
-        e.stopPropagation();
-        startEdit(id);
     });
 
     div.appendChild(input);
@@ -734,6 +723,11 @@ document.addEventListener('mouseup', () => {
     el(id)?.classList.remove('dragging');
     document.body.classList.remove('is-dragging');
 
+    if (!moved && wasSelected && !isEditing(id)) {
+        startEdit(id);
+        return;
+    }
+
     // 別ノードにスナップ → 親子関係を変更
     if (moved && snapTarget && snapTarget !== nodes[id]?.parentId) {
         saveSnapshot();
@@ -786,23 +780,6 @@ app.addEventListener('mousedown', e => {
 
 // ── Keyboard ──────────────────────────────────────────────────────────────────
 
-function navigateArrow(fromId, key) {
-    const n = nodes[fromId];
-    if (key === 'ArrowUp' && n.parentId) {
-        const sibs = nodes[n.parentId].children;
-        const i = sibs.indexOf(fromId);
-        if (i > 0) select(sibs[i - 1]);
-    } else if (key === 'ArrowDown' && n.parentId) {
-        const sibs = nodes[n.parentId].children;
-        const i = sibs.indexOf(fromId);
-        if (i < sibs.length - 1) select(sibs[i + 1]);
-    } else if (key === 'ArrowRight' && n.children.length) {
-        select(n.children[0]);
-    } else if (key === 'ArrowLeft' && n.parentId) {
-        select(n.parentId);
-    }
-}
-
 function handleKey(e, id) {
     if (isEditing(id)) {
         // e.isComposing=true の間はIME変換中 → Enter/Tab でノード操作しない
@@ -811,10 +788,6 @@ function handleKey(e, id) {
         else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopEdit(id); }
         else if ((e.key === 'Backspace' || e.key === 'Delete') && nodes[id].text === '' && id !== 'root') {
             e.preventDefault(); stopEdit(id); deleteNode(id);
-        } else if (!e.isComposing && ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) {
-            // 編集中でも矢印キーで即ナビゲーション
-            e.preventDefault(); e.stopPropagation();
-            stopEdit(id); applyLayout(); navigateArrow(id, e.key);
         }
         return;
     }
@@ -829,11 +802,34 @@ function handleKey(e, id) {
         case 'Delete':
         case 'Backspace': e.preventDefault(); deleteNode(id); break;
 
-        case 'ArrowUp':
-        case 'ArrowDown':
+        case 'ArrowUp': {
+            e.preventDefault();
+            if (n.parentId) {
+                const sibs = nodes[n.parentId].children;
+                const i = sibs.indexOf(id);
+                select(i > 0 ? sibs[i - 1] : n.parentId);
+            }
+            break;
+        }
+        case 'ArrowDown': {
+            e.preventDefault();
+            if (n.parentId) {
+                const sibs = nodes[n.parentId].children;
+                const i = sibs.indexOf(id);
+                if (i < sibs.length - 1) select(sibs[i + 1]);
+            } else if (n.children.length) {
+                select(n.children[0]);
+            }
+            break;
+        }
         case 'ArrowRight':
+            e.preventDefault();
+            if (n.children.length) select(n.children[0]);
+            break;
         case 'ArrowLeft':
-            e.preventDefault(); e.stopPropagation(); navigateArrow(id, e.key); break;
+            e.preventDefault();
+            if (n.parentId) select(n.parentId);
+            break;
 
         default:
             if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
@@ -871,13 +867,6 @@ document.addEventListener('keydown', e => {
         e.preventDefault();
         redo();
         return;
-    }
-
-    // 矢印キーナビ（handleKey で stopPropagation されなかった場合 = フォーカスなし）
-    if (!editing && ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) {
-        e.preventDefault();
-        if (!selected) { select('root'); return; }
-        navigateArrow(selected, e.key);
     }
 });
 
