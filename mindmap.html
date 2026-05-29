@@ -172,7 +172,8 @@
 
         .node.selected {
             border-color: var(--accent2);
-            box-shadow: 0 0 0 3px rgba(56, 139, 253, 0.2),
+            box-shadow: 0 0 0 3px var(--accent2),
+                        0 0 18px rgba(56, 139, 253, 0.55),
                         0 8px 24px rgba(0, 0, 0, 0.4);
         }
 
@@ -803,7 +804,7 @@ function handleKey(e, id) {
         case 'Backspace': e.preventDefault(); deleteNode(id); break;
 
         case 'ArrowUp': {
-            e.preventDefault();
+            e.preventDefault(); e.stopPropagation();
             if (n.parentId) {
                 const sibs = nodes[n.parentId].children;
                 const i = sibs.indexOf(id);
@@ -812,7 +813,7 @@ function handleKey(e, id) {
             break;
         }
         case 'ArrowDown': {
-            e.preventDefault();
+            e.preventDefault(); e.stopPropagation();
             if (n.parentId) {
                 const sibs = nodes[n.parentId].children;
                 const i = sibs.indexOf(id);
@@ -823,11 +824,11 @@ function handleKey(e, id) {
             break;
         }
         case 'ArrowRight':
-            e.preventDefault();
+            e.preventDefault(); e.stopPropagation();
             if (n.children.length) select(n.children[0]);
             break;
         case 'ArrowLeft':
-            e.preventDefault();
+            e.preventDefault(); e.stopPropagation();
             if (n.parentId) select(n.parentId);
             break;
 
@@ -869,10 +870,9 @@ document.addEventListener('keydown', e => {
         return;
     }
 
-    // 矢印キーナビ：ノードinputにフォーカスがない場合も動作させる
+    // 矢印キーナビ：handleKey が stopPropagation するので
+    // ここに来るのは「ノードinputにフォーカスがない」状態のみ
     if (!editing && ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) {
-        // inputにフォーカスがある場合は handleKey に任せる（二重発火防止）
-        if (document.activeElement?.closest?.('.node')) return;
         e.preventDefault();
         if (!selected) { select('root'); return; }
         const n = nodes[selected];
