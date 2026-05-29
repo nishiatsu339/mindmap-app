@@ -461,7 +461,8 @@ function select(id) {
     selected = id;
     if (!id) return;
     el(id)?.classList.add('selected');
-    inp(id)?.focus();
+    // inputにはフォーカスしない → 矢印キーがカーソル移動に横取りされるのを防ぐ
+    // 編集開始（startEdit / 文字キー押下 / F2）のときだけinputにフォーカスする
 }
 
 function startEdit(id) {
@@ -982,8 +983,6 @@ applyTheme(localStorage.getItem('mindmap_theme') || 'dark');
 
 select('root');
 applyView();
-// ページ描画完了後に確実にフォーカスを当てる
-requestAnimationFrame(() => { if (selected) inp(selected)?.focus(); });
 </script>
 </body>
 </html>
