@@ -541,11 +541,13 @@ function startEdit(id) {
 function stopEdit(id) {
     const i = inp(id);
     if (!i) return;
+    if (i.hasAttribute('readonly')) return; // すでに終了済み（blur再帰防止）
     i.setAttribute('readonly', '');
     const div = el(id);
     if (!div) return;
     div.classList.remove('editing');
     if (selected === id) div.classList.add('selected');
+    i.blur(); // フォーカスを離す → 矢印キーがカーソル移動に干渉しない
 }
 
 function isEditing(id) { return !(inp(id)?.hasAttribute('readonly')); }
