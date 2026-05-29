@@ -491,6 +491,7 @@ function mountNode(id) {
 
     div.addEventListener('mousedown', e => {
         e.stopPropagation();
+        if (e.button !== 0) return; // 左クリックのみドラッグ処理
         const wasSelected = (selected === id);
         if (!wasSelected) select(id);
 
@@ -508,7 +509,6 @@ function mountNode(id) {
         if (id === 'root') return;
         e.preventDefault();
         e.stopPropagation();
-        select(id);
         showColorMenu(id, e.clientX, e.clientY);
     });
 
@@ -920,7 +920,8 @@ function handleKey(e, id) {
 
 // ── Color menu ────────────────────────────────────────────────────────────────
 
-let colorMenuEl = null;
+let colorMenuEl  = null;
+let colorOverlay = null;
 
 const COLOR_DEFS = [
     { id: 'red',    label: '赤', fill: '#f85149' },
@@ -931,8 +932,16 @@ const COLOR_DEFS = [
 function showColorMenu(id, x, y) {
     closeColorMenu();
 
-    const menu = document.createElement('div');
-    menu.id = 'color-menu';
+    // 透明オーバーレイ：外側クリックで確実に閉じる
+    colorOverlay = document.createElement('div');
+    colorOverlay.style.cssText = 'position:fixed;inset:0;z-index:399;';
+    colorOverlay.addEventListener('pointerdown', closeColorMenu);
+    colorOverlay.addEventListener('contextmenu', e => { e.preventDefault(); closeColorMenu(); });
+    document.body.appendChild(colorOverlay);
+
+    // メニュー本体
+    colorMenuEl = document.createElement('div');
+    colorMenuEl.id = 'color-menu'; // z-index:400
 
     const header = document.createElement('div');
     header.className = 'color-menu-header';
@@ -941,42 +950,29 @@ function showColorMenu(id, x, y) {
     const swatches = document.createElement('div');
     swatches.className = 'color-swatches';
 
-    const current = nodes[id]?.color;
-
     COLOR_DEFS.forEach(c => {
         const btn = document.createElement('button');
-        btn.className  = 'color-swatch' + (current === c.id ? ' active' : '');
-        btn.title      = c.label;
+        btn.className = 'color-swatch' + (nodes[id]?.color === c.id ? ' active' : '');
+        btn.title     = c.label;
         btn.style.background = c.fill;
-        btn.addEventListener('click', e => {
-            e.stopPropagation();
-            setNodeColor(id, c.id);
-            closeColorMenu();
-        });
+        btn.addEventListener('pointerdown', e => e.stopPropagation()); // オーバーレイに届かせない
+        btn.addEventListener('click', () => { setNodeColor(id, c.id); closeColorMenu(); });
         swatches.appendChild(btn);
     });
 
-    menu.appendChild(header);
-    menu.appendChild(swatches);
-    document.body.appendChild(menu);
-    colorMenuEl = menu;
+    colorMenuEl.appendChild(header);
+    colorMenuEl.appendChild(swatches);
+    document.body.appendChild(colorMenuEl);
 
-    // 画面端にはみ出さないよう位置を調整
-    const mw = 120, mh = 80;
-    const lx = (x + mw > window.innerWidth)  ? x - mw : x;
-    const ly = (y + mh > window.innerHeight) ? y - mh : y + 8;
-    menu.style.left = lx + 'px';
-    menu.style.top  = ly + 'px';
-
-    // 外側クリックで閉じる
-    setTimeout(() => {
-        document.addEventListener('click', closeColorMenu, { once: true });
-        document.addEventListener('contextmenu', closeColorMenu, { once: true });
-    }, 0);
+    // 位置調整（画面端からはみ出さないように）
+    const mw = 130, mh = 90;
+    colorMenuEl.style.left = Math.min(x, window.innerWidth  - mw - 10) + 'px';
+    colorMenuEl.style.top  = (y + mh > window.innerHeight ? y - mh - 5 : y + 5) + 'px';
 }
 
 function closeColorMenu() {
-    if (colorMenuEl) { colorMenuEl.remove(); colorMenuEl = null; }
+    if (colorMenuEl)  { colorMenuEl.remove();  colorMenuEl  = null; }
+    if (colorOverlay) { colorOverlay.remove(); colorOverlay = null; }
 }
 
 function setNodeColor(id, color) {
