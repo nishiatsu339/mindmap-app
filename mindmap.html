@@ -170,6 +170,16 @@
             cursor: default;
         }
 
+        /* ── ノードカラー（ダーク） ── */
+        .node.color-red    { background: #3d1417; border-color: #f85149; }
+        .node.color-blue   { background: #0d2137; border-color: #388bfd; }
+        .node.color-yellow { background: #2d2500; border-color: #e3b341; }
+
+        /* ── ノードカラー（ライト） ── */
+        [data-theme="light"] .node.color-red    { background: #fff0ee; border-color: #d73a49; }
+        [data-theme="light"] .node.color-blue   { background: #dbeafe; border-color: #0969da; }
+        [data-theme="light"] .node.color-yellow { background: #fffbdd; border-color: #b08800; }
+
         .node.selected {
             border-color: var(--accent2);
             box-shadow: 0 0 0 3px rgba(56, 139, 253, 0.2),
@@ -265,6 +275,53 @@
             font-size: 12px;
             font-family: monospace;
             pointer-events: none;
+        }
+
+        /* ── カラーメニュー ── */
+        #color-menu {
+            position: fixed;
+            background: var(--surface);
+            border: 1.5px solid var(--border);
+            border-radius: 12px;
+            padding: 10px 14px 12px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            z-index: 400;
+            box-shadow: 0 8px 28px rgba(0,0,0,0.5);
+            user-select: none;
+        }
+
+        .color-menu-header {
+            font-size: 16px;
+            line-height: 1;
+            opacity: 0.8;
+        }
+
+        .color-swatches {
+            display: flex;
+            gap: 10px;
+        }
+
+        .color-swatch {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            border: 2.5px solid rgba(255,255,255,0.15);
+            cursor: pointer;
+            transition: transform 0.12s, box-shadow 0.12s;
+            outline: none;
+        }
+
+        .color-swatch:hover {
+            transform: scale(1.25);
+            box-shadow: 0 0 0 3px rgba(255,255,255,0.25),
+                        0 4px 12px rgba(0,0,0,0.4);
+        }
+
+        .color-swatch.active {
+            box-shadow: 0 0 0 3px #fff, 0 0 0 5px currentColor;
         }
     </style>
 </head>
@@ -445,6 +502,18 @@ function mountNode(id) {
             drag = { id: 'root', moved: false, wasSelected };
         }
     });
+
+    // 右クリック → カラーメニュー（ルートノード以外）
+    div.addEventListener('contextmenu', e => {
+        if (id === 'root') return;
+        e.preventDefault();
+        e.stopPropagation();
+        select(id);
+        showColorMenu(id, e.clientX, e.clientY);
+    });
+
+    // 保存済みの色を反映
+    if (n.color) div.classList.add('color-' + n.color);
 
     div.appendChild(input);
     canvasEl.appendChild(div);
@@ -849,6 +918,78 @@ function handleKey(e, id) {
     }
 }
 
+// ── Color menu ────────────────────────────────────────────────────────────────
+
+let colorMenuEl = null;
+
+const COLOR_DEFS = [
+    { id: 'red',    label: '赤', fill: '#f85149' },
+    { id: 'blue',   label: '青', fill: '#388bfd' },
+    { id: 'yellow', label: '黄', fill: '#e3b341' },
+];
+
+function showColorMenu(id, x, y) {
+    closeColorMenu();
+
+    const menu = document.createElement('div');
+    menu.id = 'color-menu';
+
+    const header = document.createElement('div');
+    header.className = 'color-menu-header';
+    header.textContent = '🖌️';
+
+    const swatches = document.createElement('div');
+    swatches.className = 'color-swatches';
+
+    const current = nodes[id]?.color;
+
+    COLOR_DEFS.forEach(c => {
+        const btn = document.createElement('button');
+        btn.className  = 'color-swatch' + (current === c.id ? ' active' : '');
+        btn.title      = c.label;
+        btn.style.background = c.fill;
+        btn.addEventListener('click', e => {
+            e.stopPropagation();
+            setNodeColor(id, c.id);
+            closeColorMenu();
+        });
+        swatches.appendChild(btn);
+    });
+
+    menu.appendChild(header);
+    menu.appendChild(swatches);
+    document.body.appendChild(menu);
+    colorMenuEl = menu;
+
+    // 画面端にはみ出さないよう位置を調整
+    const mw = 120, mh = 80;
+    const lx = (x + mw > window.innerWidth)  ? x - mw : x;
+    const ly = (y + mh > window.innerHeight) ? y - mh : y + 8;
+    menu.style.left = lx + 'px';
+    menu.style.top  = ly + 'px';
+
+    // 外側クリックで閉じる
+    setTimeout(() => {
+        document.addEventListener('click', closeColorMenu, { once: true });
+        document.addEventListener('contextmenu', closeColorMenu, { once: true });
+    }, 0);
+}
+
+function closeColorMenu() {
+    if (colorMenuEl) { colorMenuEl.remove(); colorMenuEl = null; }
+}
+
+function setNodeColor(id, color) {
+    saveSnapshot();
+    nodes[id].color = color;
+    const div = el(id);
+    if (div) {
+        div.classList.remove('color-red', 'color-blue', 'color-yellow');
+        div.classList.add('color-' + color);
+    }
+    scheduleSave();
+}
+
 // ── Global keyboard handler ───────────────────────────────────────────────────
 // キーイベントをすべてここで一元管理する（inputのフォーカス状態に依存しない）
 
@@ -858,9 +999,10 @@ document.addEventListener('keydown', e => {
 
     const editing = !!document.querySelector('.node.editing');
 
-    // Escape（非編集時）: 元に戻す
-    if (e.key === 'Escape' && !editing) {
-        e.preventDefault(); undo(); return;
+    // Escape: カラーメニューを閉じる → 非編集時は元に戻す
+    if (e.key === 'Escape') {
+        if (colorMenuEl) { closeColorMenu(); return; }
+        if (!editing) { e.preventDefault(); undo(); return; }
     }
     // Cmd/Ctrl+Z: 元に戻す
     if ((e.key === 'z' || e.key === 'Z') && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
