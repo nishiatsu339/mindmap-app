@@ -170,11 +170,14 @@
             cursor: default;
         }
 
+        @keyframes node-select-flash {
+            0%   { box-shadow: 0 0 0 3px var(--accent2), 0 0 20px rgba(56,139,253,0.55); }
+            100% { box-shadow: none; }
+        }
+
         .node.selected {
             border-color: var(--accent2);
-            box-shadow: 0 0 0 3px var(--accent2),
-                        0 0 18px rgba(56, 139, 253, 0.55),
-                        0 8px 24px rgba(0, 0, 0, 0.4);
+            animation: node-select-flash 0.5s ease-out forwards;
         }
 
         .node.editing {
@@ -808,7 +811,7 @@ function handleKey(e, id) {
             if (n.parentId) {
                 const sibs = nodes[n.parentId].children;
                 const i = sibs.indexOf(id);
-                select(i > 0 ? sibs[i - 1] : n.parentId);
+                if (i > 0) select(sibs[i - 1]);
             }
             break;
         }
@@ -818,8 +821,6 @@ function handleKey(e, id) {
                 const sibs = nodes[n.parentId].children;
                 const i = sibs.indexOf(id);
                 if (i < sibs.length - 1) select(sibs[i + 1]);
-            } else if (n.children.length) {
-                select(n.children[0]);
             }
             break;
         }
@@ -879,15 +880,11 @@ document.addEventListener('keydown', e => {
         if (e.key === 'ArrowUp' && n.parentId) {
             const sibs = nodes[n.parentId].children;
             const i = sibs.indexOf(selected);
-            select(i > 0 ? sibs[i - 1] : n.parentId);
-        } else if (e.key === 'ArrowDown') {
-            if (n.parentId) {
-                const sibs = nodes[n.parentId].children;
-                const i = sibs.indexOf(selected);
-                if (i < sibs.length - 1) select(sibs[i + 1]);
-            } else if (n.children.length) {
-                select(n.children[0]);
-            }
+            if (i > 0) select(sibs[i - 1]);
+        } else if (e.key === 'ArrowDown' && n.parentId) {
+            const sibs = nodes[n.parentId].children;
+            const i = sibs.indexOf(selected);
+            if (i < sibs.length - 1) select(sibs[i + 1]);
         } else if (e.key === 'ArrowRight' && n.children.length) {
             select(n.children[0]);
         } else if (e.key === 'ArrowLeft' && n.parentId) {
