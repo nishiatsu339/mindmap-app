@@ -1016,6 +1016,20 @@ document.addEventListener('keydown', e => {
     if ((e.key === 'z' || e.key === 'Z') && (e.ctrlKey || e.metaKey) && e.shiftKey) {
         e.preventDefault(); redo(); return;
     }
+    // PgUp: 拡大 / PgDn: 縮小
+    if (e.key === 'PageUp' || e.key === 'PageDown') {
+        e.preventDefault();
+        const factor  = e.key === 'PageUp' ? 1.25 : 1 / 1.25;
+        const newScale = Math.min(4, Math.max(0.1, view.scale * factor));
+        // 画面中心を基準にズーム
+        const cx = app.clientWidth  / 2;
+        const cy = app.clientHeight / 2;
+        view.x = cx - (cx - view.x) * (newScale / view.scale);
+        view.y = cy - (cy - view.y) * (newScale / view.scale);
+        view.scale = newScale;
+        applyView();
+        return;
+    }
 
     // 選択ノードへキーを転送（編集中か否かは handleKey 内で判断）
     if (selected) {
