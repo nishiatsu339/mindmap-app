@@ -28,6 +28,8 @@
             --root-bg:     #0d2137;
             --line-root:   #1f6feb;
             --line-child:  #30363d;
+            --selected-bg: #1f6feb;
+            --selected-fg: #ffffff;
         }
 
         [data-theme="light"] {
@@ -45,6 +47,8 @@
             --root-bg:     #dbeafe;
             --line-root:   #0969da;
             --line-child:  #b0b7c0;
+            --selected-bg: #0969da;
+            --selected-fg: #ffffff;
         }
 
         body {
@@ -170,14 +174,9 @@
             cursor: default;
         }
 
-        @keyframes node-select-flash {
-            0%   { box-shadow: 0 0 0 3px var(--accent2), 0 0 20px rgba(56,139,253,0.55); }
-            100% { box-shadow: none; }
-        }
-
         .node.selected {
-            border-color: var(--accent2);
-            animation: node-select-flash 0.5s ease-out forwards;
+            background: var(--selected-bg);
+            border-color: var(--selected-bg);
         }
 
         .node.editing {
@@ -225,6 +224,11 @@
         .node.editing input {
             pointer-events: auto;
             cursor: text;
+        }
+
+        .node.selected input {
+            color: var(--selected-fg);
+            caret-color: var(--selected-fg);
         }
 
         .node.dragging input { pointer-events: none; }
