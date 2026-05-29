@@ -852,6 +852,9 @@ function handleKey(e, id) {
 // ── Global undo (Esc 非編集時 / Cmd+Z) ───────────────────────────────────────
 
 document.addEventListener('keydown', e => {
+    // マップ名など contenteditable 要素への入力は無視
+    if (e.target.contentEditable === 'true') return;
+
     const editing = !!document.querySelector('.node.editing');
     if (e.key === 'Escape' && !editing) {
         e.preventDefault();
@@ -867,6 +870,12 @@ document.addEventListener('keydown', e => {
         e.preventDefault();
         redo();
         return;
+    }
+
+    // ノードが選択されているが input にフォーカスがない場合（ページ読み込み直後・背景クリック後など）
+    // 選択ノードへキーイベントを転送する
+    if (selected && !editing && e.target.tagName !== 'INPUT') {
+        handleKey(e, selected);
     }
 });
 
@@ -976,6 +985,8 @@ applyTheme(localStorage.getItem('mindmap_theme') || 'dark');
 
 select('root');
 applyView();
+// ページ描画完了後に確実にフォーカスを当てる
+requestAnimationFrame(() => { if (selected) inp(selected)?.focus(); });
 </script>
 </body>
 </html>
