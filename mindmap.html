@@ -904,12 +904,12 @@ function handleKey(e, id) {
                     i.removeAttribute('readonly');
                     el(id)?.classList.remove('selected');
                     el(id)?.classList.add('editing');
-                    i.value = e.key;
-                    n.text  = e.key;
+                    i.value = '';
+                    n.text  = '';
                     sizeInput(i);
                     i.focus();
-                    i.setSelectionRange(1, 1);
-                    e.preventDefault();
+                    // e.preventDefault() は呼ばない → ブラウザが自然に文字を入力する
+                    // これにより大文字/小文字が正しく扱われる
                 }
             }
     }
