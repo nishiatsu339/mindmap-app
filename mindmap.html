@@ -525,8 +525,9 @@ function select(id) {
     selected = id;
     if (!id) return;
     el(id)?.classList.add('selected');
-    // inputにはフォーカスしない → 矢印キーがカーソル移動に横取りされるのを防ぐ
-    // 編集開始（startEdit / 文字キー押下 / F2）のときだけinputにフォーカスする
+    // readonlyのままfocusしておく
+    // → 次のキー入力時にmacOSがShift状態を正しく保持し「小文字になる」バグを防ぐ
+    inp(id)?.focus();
 }
 
 function startEdit(id) {
@@ -851,7 +852,7 @@ function handleKey(e, id) {
         // e.isComposing=true の間はIME変換中 → Enter/Tab でノード操作しない
         if      (e.key === 'Enter'  && !e.isComposing) { e.preventDefault(); stopEdit(id); addSibling(id); }
         else if (e.key === 'Tab'    && !e.isComposing) { e.preventDefault(); stopEdit(id); addChild(id);   }
-        else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopEdit(id); }
+        else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopEdit(id); inp(id)?.focus(); }
         else if ((e.key === 'Backspace' || e.key === 'Delete') && nodes[id].text === '' && id !== 'root') {
             e.preventDefault(); stopEdit(id); deleteNode(id);
         }
@@ -901,22 +902,17 @@ function handleKey(e, id) {
             if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
                 const i = inp(id);
                 if (i) {
-                    const char = e.key;        // keydownのe.keyはShift状態を正しく含む
-                    e.preventDefault();        // ブラウザのデフォルト入力を阻止
+                    // select()でfocus済みのためe.keyはShift状態を正しく含む
+                    const char = e.key;
+                    e.preventDefault();
                     i.removeAttribute('readonly');
                     el(id)?.classList.remove('selected');
                     el(id)?.classList.add('editing');
                     i.value = char;
                     n.text  = char;
                     sizeInput(i);
-                    // focus()をsetTimeout(0)で遅延させることで、macOSが
-                    // このキーを新フォーカス先に「再送信」するのを防ぐ
-                    setTimeout(() => {
-                        if (i.isConnected) {
-                            i.focus();
-                            i.setSelectionRange(char.length, char.length);
-                        }
-                    }, 0);
+                    i.setSelectionRange(char.length, char.length);
+                    // i.focus()不要 — select()で既にfocus済み
                 }
             }
     }
