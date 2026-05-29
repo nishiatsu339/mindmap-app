@@ -430,7 +430,6 @@ function mountNode(id) {
         updateLines();
         scheduleSave();
     });
-    input.addEventListener('keydown', e => handleKey(e, id));
     input.addEventListener('blur', () => { stopEdit(id); applyLayout(); });
 
     div.addEventListener('mousedown', e => {
@@ -849,32 +848,30 @@ function handleKey(e, id) {
     }
 }
 
-// ── Global undo (Esc 非編集時 / Cmd+Z) ───────────────────────────────────────
+// ── Global keyboard handler ───────────────────────────────────────────────────
+// キーイベントをすべてここで一元管理する（inputのフォーカス状態に依存しない）
 
 document.addEventListener('keydown', e => {
     // マップ名など contenteditable 要素への入力は無視
     if (e.target.contentEditable === 'true') return;
 
     const editing = !!document.querySelector('.node.editing');
+
+    // Escape（非編集時）: 元に戻す
     if (e.key === 'Escape' && !editing) {
-        e.preventDefault();
-        undo();
-        return;
+        e.preventDefault(); undo(); return;
     }
+    // Cmd/Ctrl+Z: 元に戻す
     if ((e.key === 'z' || e.key === 'Z') && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
-        e.preventDefault();
-        undo();
-        return;
+        e.preventDefault(); undo(); return;
     }
+    // Cmd/Ctrl+Shift+Z: やり直し
     if ((e.key === 'z' || e.key === 'Z') && (e.ctrlKey || e.metaKey) && e.shiftKey) {
-        e.preventDefault();
-        redo();
-        return;
+        e.preventDefault(); redo(); return;
     }
 
-    // ノードが選択されているが input にフォーカスがない場合（ページ読み込み直後・背景クリック後など）
-    // 選択ノードへキーイベントを転送する
-    if (selected && !editing && e.target.tagName !== 'INPUT') {
+    // 選択ノードへキーを転送（編集中か否かは handleKey 内で判断）
+    if (selected) {
         handleKey(e, selected);
     }
 });
