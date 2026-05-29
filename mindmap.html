@@ -439,16 +439,20 @@ function mountNode(id) {
 
     div.addEventListener('mousedown', e => {
         e.stopPropagation();
-        const wasSelected = (selected === id);
-        if (!wasSelected) select(id);
+        if (selected !== id) select(id);
 
         if (id !== 'root') {
             const [cx, cy] = s2c(e.clientX, e.clientY);
             drag = { id, ox: cx - n.x, oy: cy - n.y,
-                     sx: n.x, sy: n.y, moved: false, wasSelected };
+                     sx: n.x, sy: n.y, moved: false };
         } else {
-            drag = { id: 'root', moved: false, wasSelected };
+            drag = { id: 'root', moved: false };
         }
+    });
+
+    div.addEventListener('dblclick', e => {
+        e.stopPropagation();
+        startEdit(id);
     });
 
     div.appendChild(input);
@@ -726,11 +730,6 @@ document.addEventListener('mouseup', () => {
     drag = null;
     el(id)?.classList.remove('dragging');
     document.body.classList.remove('is-dragging');
-
-    if (!moved && wasSelected && !isEditing(id)) {
-        startEdit(id);
-        return;
-    }
 
     // 別ノードにスナップ → 親子関係を変更
     if (moved && snapTarget && snapTarget !== nodes[id]?.parentId) {
