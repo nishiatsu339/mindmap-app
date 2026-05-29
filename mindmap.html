@@ -504,13 +504,7 @@ function mountNode(id) {
         }
     });
 
-    // 右クリック → カラーメニュー（ルートノード以外）
-    div.addEventListener('contextmenu', e => {
-        if (id === 'root') return;
-        e.preventDefault();
-        e.stopPropagation();
-        showColorMenu(id, e.clientX, e.clientY);
-    });
+    // ※ 右クリックはdocument側で一括処理（下の document.addEventListener('contextmenu', ...) を参照）
 
     // 保存済みの色を反映
     if (n.color) div.classList.add('color-' + n.color);
@@ -917,6 +911,17 @@ function handleKey(e, id) {
             }
     }
 }
+
+// ── Right-click → color menu (document-level, avoids pointer-events issues) ──
+
+document.addEventListener('contextmenu', e => {
+    // クリックされた要素からもっとも近い .node を探す（root 以外）
+    const nodeEl = e.target.closest('.node:not(.root-node)');
+    if (!nodeEl) return; // canvas背景や root なら何もしない
+    e.preventDefault();
+    const nodeId = nodeEl.id.replace('el-', '');
+    showColorMenu(nodeId, e.clientX, e.clientY);
+});
 
 // ── Color menu ────────────────────────────────────────────────────────────────
 
