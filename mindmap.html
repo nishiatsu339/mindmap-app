@@ -383,7 +383,7 @@ const zoomLevelEl = document.getElementById('zoom-level');
 // ── Undo ─────────────────────────────────────────────────────────────────────
 
 function currentSnapshot() {
-    const snap = { cnt, nodes: {} };
+    const snap = { cnt, sel: selected, nodes: {} };
     Object.values(nodes).forEach(n => {
         snap.nodes[n.id] = { ...n, children: [...n.children] };
     });
@@ -408,7 +408,8 @@ function restoreSnapshot(snap) {
     const order = [];
     (function walk(id) { order.push(id); nodes[id].children.forEach(walk); })('root');
     order.forEach(mountNode);
-    select(null);
+    // スナップショット時に選択されていたノードを復元（消えていればrootへ）
+    select(snap.sel && nodes[snap.sel] ? snap.sel : 'root');
     updateLines();
     canvasEl.style.transition = 'opacity 0.1s';
     canvasEl.style.opacity    = '0.5';
